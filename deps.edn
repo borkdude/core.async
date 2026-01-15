@@ -2,7 +2,8 @@
  :deps
  {org.clojure/tools.analyzer.jvm {:mvn/version "1.3.2"}}
  :aliases
- {:cljs-test {:extra-deps {org.clojure/clojurescript {:local/root "../clojurescript"
+ {:cljs-test {:extra-deps {org.clojure/clojurescript {:git/url "https://github.com/borkdude/clojurescript"
+                                                      :git/sha "2ecd2ebd8b79a5ad04c568bc348b4881ddedb4d7"
                                                       #_#_:mvn/version "1.11.132"}}
               :extra-paths ["src/main/clojure/cljs" "src/test/cljs"]}
   :adv       {:main-opts ["-m" "cljs.main" "-v" "-co" "build/node_adv.edn" "-c"]}
