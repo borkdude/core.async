@@ -66,7 +66,7 @@
           (is (= [42 c] (alts! [c])))
           (done))))))
 
-#_(deftest test-alt!-and-alts!
+(deftest test-alt!-and-alts!
   (async done
     (let [l (latch 2 done)]
       (testing "alt! works"
@@ -111,7 +111,7 @@
       (is (thrown? js/Error (take! c (fn [x]))))
       (put! c 42))))
 
-#_(deftest close-on-exception-tests
+(deftest close-on-exception-tests
   (async done
     (let [l (latch 2 done)]
       (testing "go blocks"
@@ -405,7 +405,7 @@
                    (<! (async/into [] (integer-chan 10 (partition-all 5))))))
           (inc! l))))))
 
-#_(deftest test-bufferless
+(deftest test-bufferless
   (async done
     (let [c (chan)
           l (latch 2 done)]
@@ -501,7 +501,7 @@
           (is (= 42 (gobj/get #js {:foo bar} "foo")))))
       (done))))
 
-#_(deftest test-js-literals-chans
+(deftest test-js-literals-chans
   (let [c0 (chan)
         c1 (chan)]
    (async done

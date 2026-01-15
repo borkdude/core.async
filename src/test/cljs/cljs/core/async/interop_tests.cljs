@@ -18,13 +18,13 @@
            (is (= (<p! (js/Promise.resolve 42)) 42))
            (done))))
 
-#_(deftest interop-resolve-nil
+(deftest interop-resolve-nil
   (async done
          (go
            (is (= (<p! (js/Promise.resolve)) nil))
            (done))))
 
-#_(deftest interop-multiple-resolve
+(deftest interop-multiple-resolve
   (async done
          (go
            (let [total (atom 0)]
@@ -34,7 +34,7 @@
              (is (= @total 6))
              (done)))))
 
-#_(deftest interop-catch
+(deftest interop-catch
   (async done
          (let [err (js/Error. "Rejected")]
            (go
@@ -45,7 +45,7 @@
                           (<p! (js/Promise.reject err)))))))
              (done)))))
 
-#_(deftest interop-catch-non-error
+(deftest interop-catch-non-error
   (async done
          (let [err "Rejected"]
            (go
@@ -56,7 +56,7 @@
                           (<p! (js/Promise.reject err)))))))
              (done)))))
 
-#_(deftest interop-nested
+(deftest interop-nested
   (async done
          (go
            (let [total (atom 0)
@@ -69,7 +69,7 @@
              (is (= @total 11))
              (done)))))
 
-#_(deftest interop-multiple-consumer
+(deftest interop-multiple-consumer
   (async done
          (go
           (let [p (js/Promise.resolve 42)]
