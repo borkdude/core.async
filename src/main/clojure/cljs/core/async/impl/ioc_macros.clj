@@ -129,22 +129,12 @@
      ret-id)))
 
 (defmethod analyze-sexpr 'quote
-  [expr]
+  [expr env]
   expr)
 
 (defmethod analyze-sexpr '.
-  [[_ target method & args] env]
-  #_(let [args (if (seq? method)
-               (next method)
-               args)
-        method (if (seq? method)
-                 (first method)
-                 method)]
-    #_(gen-plan
-     [target-id (item-to-ssa target)
-      args-ids (all (map item-to-ssa args))
-      ret-id (add-instruction (->Dot target-id method args-ids))]
-     ret-id)))
+  [[dot target method & args] env]
+  (list* dot (analyze target env) method (map #(analyze % env) args)))
 
 #_(defn destructure-try
   [body]
@@ -365,31 +355,8 @@
   [x env]
   (-analyze `(hash-set ~@x) env))
 
-(defn strip-core-ns [sym]
-  (when (symbol? sym)
-    (if-let [ns (namespace sym)]
-      (when (= "cljs.core.async" ns)
-        (symbol (name sym)))
-      sym)))
-
 (defn transform-awaits [env form]
-  (let [res (-analyze form env)]
-    res)
-  #_(let [locals (:locals env)
-        form* form
-        form (expand locals env form)]
-    (binding [*out* *err*] (prn :expanded form))
-    (walk/postwalk
-     (fn [x]
-       (cond
-         (and (seq? x) (= '<! (strip-core-ns (first x))))
-         `(cljs.core/await (cljs.core.async/take-promise ~(second x)))
-         (and (seq? x) (= '>! (strip-core-ns (first x))))
-         `(cljs.core/await (cljs.core.async/put-promise ~(second x) ~(nth x 2)))
-         (and (seq? x) (= 'alts! (strip-core-ns (first x))))
-         `(cljs.core/await (cljs.core.async/alts-promise ~@(rest x)))
-         :else x))
-     form)))
+  (-analyze form env))
 
 (def async-custom-terminators
   {'<! 'cljs.core.async/take-promise
@@ -398,8 +365,3 @@
    'cljs.core.async/>! 'cljs.core.async/put-promise
    'alts! 'cljs.core.async/alts-promise
    'cljs.core.async/alts! 'cljs.core.async/alts-promise})
-
-#_(defn state-machine [body num-user-params env user-transitions]
-  (-> (parse-to-state-machine body env user-transitions)
-      second
-      (emit-state-machine num-user-params user-transitions)))
