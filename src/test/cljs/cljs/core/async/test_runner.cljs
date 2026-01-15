@@ -16,6 +16,9 @@
             [cljs.core.async.runner-tests]
             [clojure.string :as string]))
 
+(defmethod cljs.test/report [:cljs.test/default :begin-test-var] [m]
+  (println "Testing:" (-> m :var meta :name)))
+
 (when (exists? js/process)
   (.on js/process "uncaughtException"
     (fn [e]

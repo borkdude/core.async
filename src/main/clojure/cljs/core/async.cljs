@@ -141,6 +141,18 @@
          ret)
        true)))
 
+(defn take-promise [ch]
+  (js/Promise.
+   (fn [resolve _]
+     (if-let [ret (impl/take! ch (fn-handler resolve))]
+       (resolve @ret)))))
+
+(defn put-promise [ch val]
+  (js/Promise.
+   (fn [resolve _]
+     (if-let [ret (impl/put! ch val (fn-handler resolve))]
+       (resolve @ret)))))
+
 (defn close!
   ([port]
      (impl/close! port)))
@@ -206,6 +218,12 @@
      (when (contains? opts :default)
        (when-let [got (and (impl/active? flag) (impl/commit flag))]
          (channels/box [(:default opts) :default]))))))
+
+(defn alts-promise [ports & {:as opts}]
+  (js/Promise.
+   (fn [resolve _]
+     (if-let [ret (do-alts resolve ports opts)]
+       (resolve @ret)))))
 
 (defn alts!
   "Completes at most one of several channel operations. Must be called

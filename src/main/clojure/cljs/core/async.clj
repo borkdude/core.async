@@ -9,7 +9,7 @@
 (ns cljs.core.async
   (:require [cljs.core.async.impl.ioc-macros :as ioc]))
 
-(defmacro go
+#_(defmacro go
   "Asynchronously executes the body, returning immediately to the
   calling thread. Additionally, any visible calls to <!, >! and alt!/alts!
   channel operations within the body will block (if necessary) by
@@ -29,6 +29,14 @@
           (cljs.core.async.impl.ioc-helpers/run-state-machine-wrapped state#))))
      c#))
 
+(defmacro go [& body]
+  `(let [c# (cljs.core.async/chan 1)]
+     ((^:async fn []
+       (let [result# (do ~@(ioc/transform-awaits body))]
+         (when (some? result#)
+           (cljs.core.async/put! c# result#))
+         (cljs.core.async/close! c#))))
+     c#))
 
 (defn do-alt [alts clauses]
   (assert (even? (count clauses)) "unbalanced clauses")

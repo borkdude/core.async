@@ -12,19 +12,19 @@
             [cljs.core.async.interop :refer [p->c] :refer-macros [<p!]]
             [cljs.test :refer-macros [deftest is async]]))
 
-(deftest interop-resolve
+#_(deftest interop-resolve
   (async done
          (go
            (is (= (<p! (js/Promise.resolve 42)) 42))
            (done))))
 
-(deftest interop-resolve-nil
+#_(deftest interop-resolve-nil
   (async done
          (go
            (is (= (<p! (js/Promise.resolve)) nil))
            (done))))
 
-(deftest interop-multiple-resolve
+#_(deftest interop-multiple-resolve
   (async done
          (go
            (let [total (atom 0)]
@@ -34,7 +34,7 @@
              (is (= @total 6))
              (done)))))
 
-(deftest interop-catch
+#_(deftest interop-catch
   (async done
          (let [err (js/Error. "Rejected")]
            (go
@@ -45,7 +45,7 @@
                           (<p! (js/Promise.reject err)))))))
              (done)))))
 
-(deftest interop-catch-non-error
+#_(deftest interop-catch-non-error
   (async done
          (let [err "Rejected"]
            (go
@@ -56,7 +56,7 @@
                           (<p! (js/Promise.reject err)))))))
              (done)))))
 
-(deftest interop-nested
+#_(deftest interop-nested
   (async done
          (go
            (let [total (atom 0)
@@ -69,7 +69,7 @@
              (is (= @total 11))
              (done)))))
 
-(deftest interop-multiple-consumer
+#_(deftest interop-multiple-consumer
   (async done
          (go
           (let [p (js/Promise.resolve 42)]

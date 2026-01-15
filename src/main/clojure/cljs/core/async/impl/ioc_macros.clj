@@ -13,7 +13,8 @@
   (:refer-clojure :exclude [all])
   (:require [clojure.pprint :refer [pprint]]
             [clojure.set :refer (intersection)]
-            [cljs.analyzer :as cljs])
+            [cljs.analyzer :as cljs]
+            [clojure.walk :as walk])
   (:import [cljs.tagged_literals JSValue]))
 
 (defn debug [x]
@@ -933,6 +934,25 @@
                 (recur ~state-sym)
                 ret-value#)))))))
 
+(defn strip-core-ns [sym]
+  (when (symbol? sym)
+    (if-let [ns (namespace sym)]
+      (when (= "cljs.core.async" ns)
+        (symbol (name sym)))
+      sym)))
+
+(defn transform-awaits [form]
+  (walk/postwalk
+   (fn [x]
+     (cond
+       (and (seq? x) (= '<! (strip-core-ns (first x))))
+       `(cljs.core/await (cljs.core.async/take-promise ~(second x)))
+       (and (seq? x) (= '>! (strip-core-ns (first x))))
+       `(cljs.core/await (cljs.core.async/put-promise ~(second x) ~(nth x 2)))
+       (and (seq? x) (= 'alts! (strip-core-ns (first x))))
+       `(cljs.core/await (cljs.core.async/alts-promise ~@(rest x)))
+       :else x))
+   form))
 
 (def async-custom-terminators
   {'<! 'cljs.core.async.impl.ioc-helpers/take!
@@ -942,7 +962,6 @@
    'alts! 'cljs.core.async/ioc-alts!
    'cljs.core.async/alts! 'cljs.core.async/ioc-alts!
    :Return 'cljs.core.async.impl.ioc-helpers/return-chan})
-
 
 (defn state-machine [body num-user-params env user-transitions]
   (-> (parse-to-state-machine body env user-transitions)
