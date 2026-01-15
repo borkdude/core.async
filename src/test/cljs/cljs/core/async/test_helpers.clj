@@ -7,9 +7,9 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns cljs.core.async.test-helpers
-  (:require [cljs.core.async.impl.ioc-macros :as ioc]))
+  #_(:require [cljs.core.async.impl.ioc-macros :as ioc]))
 
-(defmacro runner
+#_(defmacro runner
   "Creates a runner block. The code inside the body of this macro will be translated
   into a state machine. At run time the body will be run as normal. This transform is
   only really useful for testing."

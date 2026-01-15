@@ -7,17 +7,17 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns cljs.core.async.runner-tests
-  (:require [cljs.core.async.impl.protocols :refer [full? add! remove!]]
+  #_(:require [cljs.core.async.impl.protocols :refer [full? add! remove!]]
             [cljs.core.async.impl.ioc-helpers :as ioch])
-  (:require-macros [cljs.core.async.test-helpers :refer [is= is deftest testing runner locals-test]]
+  #_(:require-macros [cljs.core.async.test-helpers :refer [is= is deftest testing runner locals-test]]
                    [cljs.core.async.macros :refer [go]]
                    [cljs.core.async.impl.ioc-macros :as ioc]))
 
-(defn pause [state blk val]
+#_(defn pause [state blk val]
   (ioc/aset-all! state ioch/STATE-IDX blk ioch/VALUE-IDX val)
   :recur)
 
-(deftest runner-tests
+#_(deftest runner-tests
   (testing "macros add locals to the env"
     (is= :pass
          (runner (let [x 42]

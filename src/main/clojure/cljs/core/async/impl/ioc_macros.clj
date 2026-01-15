@@ -91,7 +91,6 @@
 
 (defmethod analyze-sexpr 'do
   [[_ & body] env]
-  (debug :body) (debug body)
   (list* 'do (map #(analyze % env) body)))
 
 #_(defmethod analyze* 'case
@@ -278,34 +277,40 @@
     val-id (add-instruction (->Const ::value))]
    val-id))
 
-#_(defmethod analyze* 'fn*
-  [& fn-expr]
-  ;; For fn expressions we just want to record the expression as well
-  ;; as a list of all known renamed locals
-  (gen-plan
-   [locals (get-binding :locals)
-    fn-id (add-instruction (->Fn fn-expr (keys locals) (vals locals)))]
-   fn-id))
-
+(defmethod analyze-sexpr 'fn*
+  [fn-expr env]
+  (let [prelude (take-while (complement sequential?) fn-expr)
+        nm (second prelude)
+        env (if nm (assoc-in env [:locals nm] nm) env)
+        remainder (drop (count prelude) fn-expr)
+        remainder (if (vector? (first remainder))
+                    (list remainder) remainder)
+        body-handler (fn [env x]
+                       (let [args (first x)
+                             locals (zipmap args args)
+                             env (update env :locals merge locals)]
+                         (doall (list* args (map #(analyze % env) (rest x))))))]
+    (concat prelude (map #(body-handler env %) remainder))))
 
 (def special-override? '#{case clojure.core/case
                           try clojure.core/try})
 
-(defn expand [locals env form]
-  (loop [form form]
-    (if-not (seq? form)
-      form
-      (let [[s & r] form]
-        (if (symbol? s)
-          (if (or (get locals s)
-                  (special-override? s))
-            form
-            (let [new-env (update-in env [:locals] merge locals)
-                  expanded (cljs/macroexpand-1 new-env form)]
-              (if (= expanded form)
-                form
-                (recur expanded))))
-          form)))))
+(defn expand [env form]
+  (let [locals (:locals env)]
+    (loop [form form]
+      (if-not (seq? form)
+        form
+        (let [[s & r] form]
+          (if (symbol? s)
+            (if (or (get locals s)
+                    (special-override? s))
+              form
+              (let [new-env (update env :locals merge locals)
+                    expanded (cljs/macroexpand-1 new-env form)]
+                (if (= expanded form)
+                  form
+                  (recur expanded))))
+            form))))))
 
 (defn fixup-aliases [sym env]
   (let [aliases (ns-aliases *ns*)]
@@ -316,27 +321,27 @@
         (symbol (name ns) (name sym))
         sym))))
 
+(defn terminate-custom [args op]
+  `(cljs.core/await ~(list* op args)))
+
 (defmethod -analyze :list
   [lst env]
-  (let [locals (:locals env)
-        val (let [exp (expand locals env lst)]
+  (let [val (let [exp (expand env lst)
+                  terminators (:terminators env)]
               (if (seq? exp)
                 (if (symbol? (first exp))
                   (let [f (fixup-aliases (first exp) env)]
                     (cond
                       (is-special? f) (analyze-sexpr exp env)
-                      (get locals f) (default-sexpr exp env)
-                      #_#_(get terminators f) (terminate-custom (next exp) (get terminators f))
+                      (get (:locals env) f) (default-sexpr exp env)
+                      (get terminators f) (terminate-custom (next exp) (get terminators f))
                       :else (default-sexpr exp env)))
                   (default-sexpr exp env))
                 (analyze exp env)))]
     val))
 
 (defmethod -analyze :default
-  [x env]
-  (debug :default)
-  (debug x)
-  x)
+  [x env] x)
 
 (defmethod -analyze :symbol
   [x env] x)
@@ -369,8 +374,6 @@
 
 (defn transform-awaits [env form]
   (let [res (-analyze form env)]
-    (debug :res)
-    (debug res)
     res)
   #_(let [locals (:locals env)
         form* form
@@ -389,13 +392,12 @@
      form)))
 
 (def async-custom-terminators
-  {'<! 'cljs.core.async.impl.ioc-helpers/take!
-   'cljs.core.async/<! 'cljs.core.async.impl.ioc-helpers/take!
-   '>! 'cljs.core.async.impl.ioc-helpers/put!
-   'cljs.core.async/>! 'cljs.core.async.impl.ioc-helpers/put!
-   'alts! 'cljs.core.async/ioc-alts!
-   'cljs.core.async/alts! 'cljs.core.async/ioc-alts!
-   :Return 'cljs.core.async.impl.ioc-helpers/return-chan})
+  {'<! 'cljs.core.async/take-promise
+   'cljs.core.async/<! 'cljs.core.async/take-promise
+   '>! 'cljs.core.async/put-promise
+   'cljs.core.async/>! 'cljs.core.async/put-promise
+   'alts! 'cljs.core.async/alts-promise
+   'cljs.core.async/alts! 'cljs.core.async/alts-promise})
 
 #_(defn state-machine [body num-user-params env user-transitions]
   (-> (parse-to-state-machine body env user-transitions)
