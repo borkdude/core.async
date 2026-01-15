@@ -32,12 +32,13 @@
 (defmacro go [& body]
   `(let [c# (cljs.core.async/chan 1)]
      ((^:async fn []
-       (let [result# ~(ioc/transform-awaits
-                       (assoc &env :terminators ioc/async-custom-terminators)
-                       `(do ~@body))]
-         (when (some? result#)
+       (try
+         (when-some [result# ~(ioc/transform-awaits
+                               (assoc &env :terminators ioc/async-custom-terminators)
+                               `(do ~@body))]
            (cljs.core.async/put! c# result#))
-         (cljs.core.async/close! c#))))
+         (finally
+           (cljs.core.async/close! c#)))))
      c#))
 
 (defn do-alt [alts clauses]
