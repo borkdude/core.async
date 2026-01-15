@@ -12,7 +12,7 @@
             [cljs.core.async.interop :refer [p->c] :refer-macros [<p!]]
             [cljs.test :refer-macros [deftest is async]]))
 
-#_(deftest interop-resolve
+(deftest interop-resolve
   (async done
          (go
            (is (= (<p! (js/Promise.resolve 42)) 42))

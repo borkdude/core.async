@@ -32,7 +32,7 @@
 (defmacro go [& body]
   `(let [c# (cljs.core.async/chan 1)]
      ((^:async fn []
-       (let [result# (do ~@(ioc/transform-awaits body))]
+       (let [result# ~(ioc/transform-awaits &env `(do ~@body))]
          (when (some? result#)
            (cljs.core.async/put! c# result#))
          (cljs.core.async/close! c#))))

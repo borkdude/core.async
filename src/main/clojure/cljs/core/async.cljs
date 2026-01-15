@@ -13,7 +13,7 @@
               [cljs.core.async.impl.buffers :as buffers]
               [cljs.core.async.impl.timers :as timers]
               [cljs.core.async.impl.dispatch :as dispatch]
-              [cljs.core.async.impl.ioc-helpers :as helpers]
+              #_[cljs.core.async.impl.ioc-helpers :as helpers]
               [goog.array :as garray])
     (:require-macros [cljs.core.async.impl.ioc-macros :as ioc]
                      [cljs.core.async :refer [go go-loop]]))
@@ -523,7 +523,7 @@
   (solo-mode* [m mode]))
 
 (defn ioc-alts! [state cont-block ports & {:as opts}]
-  (ioc/aset-all! state helpers/STATE-IDX cont-block)
+  #_#_(ioc/aset-all! state helpers/STATE-IDX cont-block)
   (when-let [cb (cljs.core.async/do-alts
                   (fn [val]
                     (ioc/aset-all! state helpers/VALUE-IDX val)
