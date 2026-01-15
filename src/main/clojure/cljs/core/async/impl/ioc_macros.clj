@@ -34,67 +34,38 @@
                        :else :default)))
 
 (defn analyze [x env]
-  (-analyze env x))
+  (-analyze x env))
 
 ;; given an sexpr, dispatch on the first item
-(defmulti analyze* (fn [x env]
-                     x))
+(defmulti analyze-sexpr (fn [x env]
+                     (first x)))
 
 (defn is-special? [x]
-  (let [^clojure.lang.MultiFn mfn analyze*]
+  (let [^clojure.lang.MultiFn mfn analyze-sexpr]
     (.getMethod mfn x)))
 
 (defn default-sexpr [args env]
   (map #(analyze % env) args))
 
-#_(defmethod analyze* 'let*
+(defmethod analyze-sexpr 'let*
   [[_ binds & body] env]
-  (let [parted (partition 2 binds)]
-    (gen-plan
-     [let-ids (all (map let-binding-to-ssa parted))
-      body-ids (all (map #(analyze % env) body))
-      _ (all (map (fn [x]
-                    (pop-binding :locals))
-                  (range (count parted))))]
-     (last body-ids))))
+  (let [parted (partition 2 binds)
+        [env binds] (reduce (fn [[env binds] [k v]]
+                                 (let [env (assoc-in env [:locals k] k)]
+                                   [env (conj binds k (analyze v env))] ))
+                               [env []]
+                               parted)]
+    `(let* ~binds ~(analyze `(do ~@body) env))))
 
-#_(defmethod analyze* 'loop*
-  [[_ locals & body]]
-  (let [parted (partition 2 locals)
-        syms (map first parted)
-        inits (map second parted)]
-    (gen-plan
-     [local-val-ids (all (map ; parallel bind
-                          (fn [sym init]
-                            (gen-plan
-                             [itm-id (local-init-to-ssa init)
-                              _ (push-alter-binding :locals assoc sym itm-id)]
-                             itm-id))
-                          syms
-                          inits))
-      _ (all (for [x syms]
-               (pop-binding :locals)))
-      local-ids (all (map (comp add-instruction ->Const) local-val-ids))
-      body-blk (add-block)
-      final-blk (add-block)
-      _ (add-instruction (->Jmp nil body-blk))
-
-      _ (set-block body-blk)
-      _ (push-alter-binding :locals merge (zipmap syms local-ids))
-      _ (push-binding :recur-point body-blk)
-      _ (push-binding :recur-nodes local-ids)
-
-      body-ids (all (map item-to-ssa body))
-
-      _ (pop-binding :recur-nodes)
-      _ (pop-binding :recur-point)
-      _ (pop-binding :locals)
-      _ (if (not= (last body-ids) ::terminated)
-          (add-instruction (->Jmp (last body-ids) final-blk))
-          (no-op))
-      _ (set-block final-blk)
-      ret-id (add-instruction (->Const ::value))]
-     ret-id)))
+(defmethod analyze-sexpr 'loop*
+  [[_ binds & body] env]
+  (let [parted (partition 2 binds)
+        [env binds] (reduce (fn [[env binds] [k v]]
+                              (let [env (assoc-in env [:locals k] k)]
+                                [env (conj binds k (analyze v env))] ))
+                            [env []]
+                            parted)]
+    `(loop* ~binds ~(analyze `(do ~@body) env))))
 
 #_(defmethod analyze* 'set!
   [[_ assignee val]]
@@ -118,11 +89,10 @@
       ret-id (add-instruction (->Set! field target-id val-id))]
      ret-id)))
 
-#_(defmethod analyze* 'do
-  [[_ & body]]
-  (gen-plan
-   [ids (all (map item-to-ssa body))]
-   (last ids)))
+(defmethod analyze-sexpr 'do
+  [[_ & body] env]
+  (debug :body) (debug body)
+  (list* 'do (map #(analyze % env) body)))
 
 #_(defmethod analyze* 'case
   [[_ val & body]]
@@ -159,15 +129,13 @@
       ret-id (add-instruction (->Const ::value))]
      ret-id)))
 
-#_(defmethod analyze* 'quote
+(defmethod analyze-sexpr 'quote
   [expr]
-  (gen-plan
-   [ret-id (add-instruction (->Const expr))]
-   ret-id))
+  expr)
 
-(defmethod analyze* '.
+(defmethod analyze-sexpr '.
   [[_ target method & args] env]
-  (let [args (if (seq? method)
+  #_(let [args (if (seq? method)
                (next method)
                args)
         method (if (seq? method)
@@ -350,13 +318,13 @@
 
 (defmethod -analyze :list
   [lst env]
-  #_(let [locals (:locals env)
+  (let [locals (:locals env)
         val (let [exp (expand locals env lst)]
               (if (seq? exp)
                 (if (symbol? (first exp))
                   (let [f (fixup-aliases (first exp) env)]
                     (cond
-                      (is-special? f) (analyze* exp env)
+                      (is-special? f) (analyze-sexpr exp env)
                       (get locals f) (default-sexpr exp env)
                       #_#_(get terminators f) (terminate-custom (next exp) (get terminators f))
                       :else (default-sexpr exp env)))
@@ -365,7 +333,10 @@
     val))
 
 (defmethod -analyze :default
-  [x env] x)
+  [x env]
+  (debug :default)
+  (debug x)
+  x)
 
 (defmethod -analyze :symbol
   [x env] x)
@@ -397,7 +368,10 @@
       sym)))
 
 (defn transform-awaits [env form]
-  (-analyze form env)
+  (let [res (-analyze form env)]
+    (debug :res)
+    (debug res)
+    res)
   #_(let [locals (:locals env)
         form* form
         form (expand locals env form)]
