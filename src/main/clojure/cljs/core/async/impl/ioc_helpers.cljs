@@ -7,28 +7,7 @@
 ;;   You must not remove this notice, or any other, from this software.
 
 (ns cljs.core.async.impl.ioc-helpers
-  (:require [cljs.core.async.impl.protocols :as impl])
-  (:require-macros [cljs.core.async.impl.ioc-macros :as ioc]))
-
-(def ^:const FN-IDX 0)
-(def ^:const STATE-IDX 1)
-(def ^:const VALUE-IDX 2)
-(def ^:const BINDINGS-IDX 3)
-(def ^:const EXCEPTION-FRAMES 4)
-(def ^:const CURRENT-EXCEPTION 5)
-(def ^:const USER-START-IDX 6)
-
-(defn aset-object [arr idx o]
-  (aget arr idx o))
-
-(defn aget-object [arr idx]
-  (aget arr idx))
-
-
-(defn finished?
-  "Returns true if the machine is in a finished state"
-  [state-array]
-  (keyword-identical? (aget state-array STATE-IDX) :finished))
+  (:require [cljs.core.async.impl.protocols :as impl]))
 
 (defn- fn-handler
   [f]
@@ -38,16 +17,6 @@
    (blockable? [_] true)
    (commit [_] f)))
 
-
-(defn run-state-machine [state]
-  ((aget-object state FN-IDX) state))
-
-(defn run-state-machine-wrapped [state]
-  (try
-    (run-state-machine state)
-    (catch js/Object ex
-      (impl/close! ^not-native (aget-object state USER-START-IDX))
-      (throw ex))))
 
 (defn take! [ch]
   (let [resolve-fn (volatile! nil)]
