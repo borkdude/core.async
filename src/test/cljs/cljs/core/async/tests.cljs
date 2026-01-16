@@ -557,6 +557,15 @@
                             :bar)))))
       (done))))
 
+(deftest ASYNC-221-letfn-test
+  (async done
+    (go
+      ;; Test that letfn works inside go and that -> is not expanded in fn names
+      (is (= true (<! (go (letfn [(-> [n] (if (zero? n) true (->> (dec n))))
+                                  (->> [n] (if (zero? n) false (-> (dec n))))]
+                            (-> 10))))))
+      (done))))
+
 (comment
 
   (test/run-tests)

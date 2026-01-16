@@ -67,28 +67,6 @@
                             parted)]
     `(loop* ~binds ~(analyze `(do ~@body) env))))
 
-#_(defmethod analyze* 'set!
-  [[_ assignee val]]
-  (let [target (cond
-                 (symbol? assignee)
-                 assignee
-                 (and (list? assignee)
-                      (= (count assignee) 2))
-                 (second assignee))
-        field (if (list? assignee)
-                (first assignee))]
-    (gen-plan
-     [locals (get-binding :locals)
-
-      target-id (if (contains? locals target)
-                  (fn [p]
-                    [(get locals target) p])
-                  (item-to-ssa target))
-      val-id    (item-to-ssa val)
-
-      ret-id (add-instruction (->Set! field target-id val-id))]
-     ret-id)))
-
 (defmethod analyze-sexpr 'do
   [[_ & body] env]
   (list* 'do (map #(analyze % env) body)))
@@ -103,6 +81,16 @@
                    [clause (analyze body env)])
                  clauses)
        ~@(when default [(analyze default env)]))))
+
+;; ASYNC-221
+(defmethod analyze-sexpr 'letfn*
+  [[letfn* bindings & body] env]
+  (let [locals (take-nth 2 bindings)
+        assigned (take-nth 2 (rest bindings))
+        env (update env :locals merge (zipmap locals locals))
+        bindings (vec (interleave locals (map #(analyze % env) assigned)))
+        body (map #(analyze % env) body)]
+    (list* letfn* bindings body)))
 
 (defmethod analyze-sexpr 'quote
   [expr env]
