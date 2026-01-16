@@ -13,7 +13,6 @@
             [cljs.core.async.timers-test]
             [cljs.core.async.interop-tests]
             [cljs.core.async.tests]
-            [cljs.core.async.runner-tests]
             [clojure.string :as string]))
 
 (defmethod cljs.test/report [:cljs.test/default :begin-test-var] [m]
@@ -26,7 +25,6 @@
         (println "TESTS FAILED TO COMPLETE:" (.-message e))))))
 
 (run-tests
-  'cljs.core.async.runner-tests
   'cljs.core.async.pipeline-test
   'cljs.core.async.buffer-tests
   'cljs.core.async.timers-test

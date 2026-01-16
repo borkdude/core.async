@@ -528,6 +528,19 @@
                   :ko))))
         (done)))))
 
+(deftest try-local-test
+  (async done
+    (try
+      (throw (ex-info "oops" {}))
+      (catch :default ->
+        (try
+          ;; this should throw and not use macro-expansion
+          (-> 1 inc)
+          (is false)
+          (catch :default e
+            (is true))))
+      (finally (done)))))
+
 (comment
 
   (test/run-tests)

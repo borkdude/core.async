@@ -17,7 +17,6 @@
    (blockable? [_] true)
    (commit [_] f)))
 
-
 (defn take! [ch]
   (let [resolve-fn (volatile! nil)]
     (if-some [ret (impl/take! ch (fn-handler (fn [v] (@resolve-fn v))))]

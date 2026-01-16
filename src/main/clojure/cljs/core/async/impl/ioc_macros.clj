@@ -136,7 +136,7 @@
   [[dot target method & args] env]
   (list* dot (analyze target env) method (map #(analyze % env) args)))
 
-#_(defn destructure-try
+(defn destructure-try
   [body]
   (reduce
    (fn [accum form]
@@ -164,108 +164,22 @@
     :finally nil}
    body))
 
-#_(defmethod analyze* 'try
-  [[_ & body]]
-  (let [{:keys [body catches finally] :as m} (destructure-try body)]
-    (gen-plan
-     [body-block (add-block)
-      exit-block (add-block)
-      finally-blk (if finally
-                    (gen-plan
-                     [cur-blk (get-block)
-                      finally-blk (add-block)
-                      _ (set-block finally-blk)
-                      _ (add-instruction (->PopTry))
-                      result-id (add-instruction (->Const ::value))
-                      _ (item-to-ssa (cons 'do (rest finally)))
-                      ;; rethrow exception on exception path
-                      _ (add-instruction (->EndFinally))
-                      _ (add-instruction (->Jmp result-id exit-block))
-                      _ (set-block cur-blk)]
-                     finally-blk)
-                    (gen-plan [] exit-block))
-      catch-blocks (all
-                    (for [[_ ex ex-bind & catch-body] catches]
-                      (gen-plan
-                       [cur-blk (get-block)
-                        catch-blk (add-block)
-                        _ (set-block catch-blk)
-                        ex-id (add-instruction (->Const ::value))
-                        ;; TODO: type hint ex-bind?
-                        _ (push-alter-binding :locals assoc ex-bind ex-id)
-                        result-id (item-to-ssa (cons 'do catch-body))
-                        ;; if there is a finally, jump to it after
-                        ;; handling the exception, if not jump to exit
-                        _ (add-instruction (->Jmp result-id finally-blk))
-                        _ (pop-binding :locals)
-                        _ (set-block cur-blk)]
-                       [catch-blk ex])))
-      catch-handler-block (add-block)
-      cur-blk (get-block)
-      _ (set-block catch-handler-block)
-      _ (add-instruction (->PopTry))
-      _ (add-instruction (->CatchHandler catch-blocks))
-      _ (set-block cur-blk)
-      _ (add-instruction (->Jmp nil body-block))
-      _ (set-block body-block)
-      ;; the finally gets pushed on to the exception handler stack, so
-      ;; it will be executed if there is an exception
-      _ (if finally
-          (add-instruction (->PushTry finally-blk))
-          (no-op))
-      _ (add-instruction (->PushTry catch-handler-block))
-      body (item-to-ssa (cons 'do body))
-      _ (add-instruction (->PopTry))
-      ;; if the body finishes executing normally, jump to the finally
-      ;; block, if it exists
-      _ (add-instruction (->Jmp body finally-blk))
-      _ (set-block exit-block)
-      ret (add-instruction (->Const ::value))]
-     ret)))
-
-#_(defmethod analyze* 'recur
-  [[_ & vals]]
-  (gen-plan
-   [val-ids (all (map item-to-ssa vals))
-    recurs (get-binding :recur-nodes)
-    _ (do (assert (= (count val-ids)
-                     (count recurs))
-                  "Wrong number of arguments to recur")
-          (no-op))
-    _ (add-instruction (->Recur recurs val-ids))
-
-    recur-point (get-binding :recur-point)
-    _ (add-instruction (->Jmp nil recur-point))]
-   ::terminated))
-
-#_(defmethod analyze* 'if
-  [[_ test then else]]
-  (gen-plan
-   [test-id (item-to-ssa test)
-    then-blk (add-block)
-    else-blk (add-block)
-    final-blk (add-block)
-    _ (add-instruction (->CondBr test-id then-blk else-blk))
-
-    _ (set-block then-blk)
-    then-id (item-to-ssa then)
-    _ (if (not= then-id ::terminated)
-        (gen-plan
-         [_ (add-instruction (->Jmp then-id final-blk))]
-         then-id)
-        (no-op))
-
-    _ (set-block else-blk)
-    else-id (item-to-ssa else)
-    _ (if (not= else-id ::terminated)
-        (gen-plan
-         [_ (add-instruction (->Jmp else-id final-blk))]
-         then-id)
-        (no-op))
-
-    _ (set-block final-blk)
-    val-id (add-instruction (->Const ::value))]
-   val-id))
+(defmethod analyze-sexpr 'try
+  [[_ & body] env]
+  (let [{:keys [body catches finally]} (destructure-try body)
+        analyzed-body (map #(analyze % env) body)
+        analyzed-catches (map (fn [[_ ex-type ex-sym & catch-body]]
+                                (let [env' (assoc-in env [:locals ex-sym] ex-sym)
+                                      catch-body (map #(analyze % env') catch-body)]
+                                  `(catch ~ex-type ~ex-sym ~@catch-body)))
+                              catches)
+        analyzed-finally (when finally
+                           (let [finally-body (map #(analyze % env) (rest finally))]
+                             `(finally ~@finally-body)))]
+    `(try
+      ~@analyzed-body
+      ~@analyzed-catches
+      ~@(when analyzed-finally [analyzed-finally]))))
 
 (defmethod analyze-sexpr 'fn*
   [fn-expr env]
