@@ -528,18 +528,23 @@
                   :ko))))
         (done)))))
 
+(defn foo1 []
+  (async done
+    (go (if (odd? 2) 2 3)
+        (done))))
+
 (deftest try-local-test
   (async done
-    (try
-      (throw (ex-info "oops" {}))
-      (catch :default ->
-        (try
-          ;; this should throw and not use macro-expansion
-          (-> 1 inc)
-          (is false)
-          (catch :default e
-            (is true))))
-      (finally (done)))))
+    (go (try
+          (throw (ex-info "oops" {}))
+          (catch :default ->
+            (try
+              ;; this should throw and not use macro-expansion
+              (-> 1 inc)
+              (is false)
+              (catch :default e
+                (is true))))
+          (finally (done))))))
 
 (comment
 
