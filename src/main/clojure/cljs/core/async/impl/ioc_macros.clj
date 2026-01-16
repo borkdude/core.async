@@ -9,12 +9,12 @@
 ;; by Timothy Baldridge
 ;; April 13, 2013
 
+;; rewritten to JS async/await by Michiel Borkent
+;; January 2026
+
 (ns cljs.core.async.impl.ioc-macros
-  (:refer-clojure :exclude [all])
-  (:require [clojure.pprint :refer [pprint]]
-            [clojure.set :refer (intersection)]
-            [cljs.analyzer :as cljs]
-            [clojure.walk :as walk])
+  (:require [cljs.analyzer :as cljs]
+            [clojure.pprint :refer [pprint]])
   (:import [cljs.tagged_literals JSValue]))
 
 (defn debug [x]
@@ -36,18 +36,24 @@
 (defn analyze [x env]
   (-analyze x env))
 
-;; given an sexpr, dispatch on the first item
-(defmulti analyze-sexpr (fn [x env]
-                     (first x)))
+;; Given an sexpr, dispatch on the first item
+(defmulti analyze-special
+  (fn [x env]
+    (first x)))
 
-(defn is-special? [x]
-  (let [^clojure.lang.MultiFn mfn analyze-sexpr]
+;; NOTE: we only need to analyze special forms that either introduce locals (e.g
+;; `let*`, `try`) or have special parts that are treated like quoted
+;; values (`case`). Special forms like `if`, `recur` etc. do not need special
+;; analysis.
+
+(defn special? [x]
+  (let [^clojure.lang.MultiFn mfn analyze-special]
     (.getMethod mfn x)))
 
-(defn default-sexpr [args env]
+(defn analyze-seq [args env]
   (map #(analyze % env) args))
 
-(defmethod analyze-sexpr 'let*
+(defmethod analyze-special 'let*
   [[_ binds & body] env]
   (let [parted (partition 2 binds)
         [env binds] (reduce (fn [[env binds] [k v]]
@@ -57,7 +63,7 @@
                                parted)]
     `(let* ~binds ~(analyze `(do ~@body) env))))
 
-(defmethod analyze-sexpr 'loop*
+(defmethod analyze-special 'loop*
   [[_ binds & body] env]
   (let [parted (partition 2 binds)
         [env binds] (reduce (fn [[env binds] [k v]]
@@ -67,11 +73,7 @@
                             parted)]
     `(loop* ~binds ~(analyze `(do ~@body) env))))
 
-(defmethod analyze-sexpr 'do
-  [[_ & body] env]
-  (list* 'do (map #(analyze % env) body)))
-
-(defmethod analyze-sexpr 'case
+(defmethod analyze-special 'case
   [[_ val & body] env]
   (let [clauses (partition 2 body)
         default (when (odd? (count body))
@@ -83,7 +85,7 @@
        ~@(when default [(analyze default env)]))))
 
 ;; ASYNC-221
-(defmethod analyze-sexpr 'letfn*
+(defmethod analyze-special 'letfn*
   [[letfn* bindings & body] env]
   (let [locals (take-nth 2 bindings)
         assigned (take-nth 2 (rest bindings))
@@ -92,13 +94,9 @@
         body (map #(analyze % env) body)]
     (list* letfn* bindings body)))
 
-(defmethod analyze-sexpr 'quote
+(defmethod analyze-special 'quote
   [expr env]
   expr)
-
-(defmethod analyze-sexpr '.
-  [[dot target method & args] env]
-  (list* dot (analyze target env) method (map #(analyze % env) args)))
 
 (defn destructure-try
   [body]
@@ -128,7 +126,7 @@
     :finally nil}
    body))
 
-(defmethod analyze-sexpr 'try
+(defmethod analyze-special 'try
   [[_ & body] env]
   (let [{:keys [body catches finally]} (destructure-try body)
         analyzed-body (map #(analyze % env) body)
@@ -145,7 +143,7 @@
       ~@analyzed-catches
       ~@(when analyzed-finally [analyzed-finally]))))
 
-(defmethod analyze-sexpr 'fn*
+(defmethod analyze-special 'fn*
   [fn-expr env]
   (let [prelude (take-while (complement sequential?) fn-expr)
         nm (second prelude)
@@ -198,16 +196,17 @@
 (defmethod -analyze :list
   [lst env]
   (let [val (let [exp (expand env lst)
-                  terminators (:terminators env)]
+                  terminators (:terminators env)
+                  first-expr (first exp)]
               (if (seq? exp)
-                (if (symbol? (first exp))
-                  (let [f (fixup-aliases (first exp) env)]
+                (if (symbol? first-expr)
+                  (let [f (fixup-aliases first-expr env)]
                     (cond
-                      (is-special? f) (analyze-sexpr exp env)
-                      (get (:locals env) f) (default-sexpr exp env)
+                      (special? f) (analyze-special exp env)
+                      (get (:locals env) f) (analyze-seq exp env)
                       (get terminators f) (terminate-custom (next exp) (get terminators f))
-                      :else (default-sexpr exp env)))
-                  (default-sexpr exp env))
+                      :else (analyze-seq exp env)))
+                  (analyze-seq exp env))
                 (analyze exp env)))]
     val))
 
