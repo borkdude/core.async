@@ -528,11 +528,6 @@
                   :ko))))
         (done)))))
 
-(defn foo1 []
-  (async done
-    (go (if (odd? 2) 2 3)
-        (done))))
-
 ;;;; Tests to exercise ioc_macros.clj expansion
 
 (deftest try-test
