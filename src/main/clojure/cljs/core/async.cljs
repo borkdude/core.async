@@ -13,7 +13,7 @@
               [cljs.core.async.impl.buffers :as buffers]
               [cljs.core.async.impl.timers :as timers]
               [cljs.core.async.impl.dispatch :as dispatch]
-              #_[cljs.core.async.impl.ioc-helpers :as helpers]
+              [cljs.core.async.impl.ioc-helpers]
               [goog.array :as garray])
     (:require-macros [cljs.core.async.impl.ioc-macros :as ioc]
                      [cljs.core.async :refer [go go-loop]]))
@@ -141,18 +141,6 @@
          ret)
        true)))
 
-(defn take-promise [ch]
-  (js/Promise.
-   (fn [resolve _]
-     (if-let [ret (impl/take! ch (fn-handler resolve))]
-       (resolve @ret)))))
-
-(defn put-promise [ch val]
-  (js/Promise.
-   (fn [resolve _]
-     (if-let [ret (impl/put! ch val (fn-handler resolve))]
-       (resolve @ret)))))
-
 (defn close!
   ([port]
      (impl/close! port)))
@@ -218,12 +206,6 @@
      (when (contains? opts :default)
        (when-let [got (and (impl/active? flag) (impl/commit flag))]
          (channels/box [(:default opts) :default]))))))
-
-(defn alts-promise [ports & {:as opts}]
-  (js/Promise.
-   (fn [resolve _]
-     (if-let [ret (do-alts resolve ports opts)]
-       (resolve @ret)))))
 
 (defn alts!
   "Completes at most one of several channel operations. Must be called
@@ -522,16 +504,14 @@
   (toggle* [m state-map])
   (solo-mode* [m mode]))
 
-(defn ioc-alts! [state cont-block ports & {:as opts}]
-  #_#_(ioc/aset-all! state helpers/STATE-IDX cont-block)
-  (when-let [cb (cljs.core.async/do-alts
-                  (fn [val]
-                    (ioc/aset-all! state helpers/VALUE-IDX val)
-                    (helpers/run-state-machine-wrapped state))
-                  ports
-                  opts)]
-    (ioc/aset-all! state helpers/VALUE-IDX @cb)
-    :recur))
+(defn ioc-alts! [ports & {:as opts}]
+  (let [resolve-fn (volatile! nil)]
+    (if-some [ret (do-alts (fn [v]
+                             (@resolve-fn v)) ports opts)]
+      @ret
+      (js/Promise.
+       (fn [resolve _]
+         (vreset! resolve-fn resolve))))))
 
 (defn mix
   "Creates and returns a mix of one or more input channels which will

@@ -49,28 +49,16 @@
       (impl/close! ^not-native (aget-object state USER-START-IDX))
       (throw ex))))
 
-(defn take! [state blk ^not-native c]
-  (if-let [cb (impl/take! c (fn-handler
-                                   (fn [x]
-                                     (ioc/aset-all! state VALUE-IDX x STATE-IDX blk)
-                                     (run-state-machine-wrapped state))))]
-    (do (ioc/aset-all! state VALUE-IDX @cb STATE-IDX blk)
-        :recur)
-    nil))
+(defn take! [ch]
+  (let [resolve-fn (volatile! nil)]
+    (if-some [ret (impl/take! ch (fn-handler (fn [v] (@resolve-fn v))))]
+      @ret
+      (js/Promise. (fn [resolve _]
+                     (vreset! resolve-fn resolve))))))
 
-(defn put! [state blk ^not-native c val]
-  (if-let [cb (impl/put! c val (fn-handler (fn [ret-val]
-                                             (ioc/aset-all! state VALUE-IDX ret-val STATE-IDX blk)
-                                             (run-state-machine-wrapped state))))]
-    (do (ioc/aset-all! state VALUE-IDX @cb STATE-IDX blk)
-        :recur)
-    nil))
-
-(defn return-chan [state value]
-  (let [^not-native c (aget state USER-START-IDX)]
-           (when-not (nil? value)
-             (impl/put! c value (fn-handler (fn [_] nil))))
-           (impl/close! c)
-           c))
-
-
+(defn put! [ch val]
+  (let [resolve-fn (volatile! nil)]
+    (if-some [ret (impl/put! ch val (fn-handler (fn [v] (@resolve-fn v))))]
+      @ret
+      (js/Promise. (fn [resolve _]
+                     (vreset! resolve-fn resolve))))))

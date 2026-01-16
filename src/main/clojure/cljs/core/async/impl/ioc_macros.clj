@@ -312,7 +312,10 @@
         sym))))
 
 (defn terminate-custom [args op]
-  `(cljs.core/await ~(list* op args)))
+  `(let [v# ~(list* op args)]
+     (if (instance? js/Promise v#)
+       (cljs.core/await v#)
+       v#)))
 
 (defmethod -analyze :list
   [lst env]
@@ -359,9 +362,9 @@
   (-analyze form env))
 
 (def async-custom-terminators
-  {'<! 'cljs.core.async/take-promise
-   'cljs.core.async/<! 'cljs.core.async/take-promise
-   '>! 'cljs.core.async/put-promise
-   'cljs.core.async/>! 'cljs.core.async/put-promise
-   'alts! 'cljs.core.async/alts-promise
-   'cljs.core.async/alts! 'cljs.core.async/alts-promise})
+  {'<! 'cljs.core.async.impl.ioc-helpers/take!
+   'cljs.core.async/<! 'cljs.core.async.impl.ioc-helpers/take!
+   '>! 'cljs.core.async.impl.ioc-helpers/put!
+   'cljs.core.async/>! 'cljs.core.async.impl.ioc-helpers/put!
+   'alts! 'cljs.core.async/ioc-alts!
+   'cljs.core.async/alts! 'cljs.core.async/ioc-alts!})
