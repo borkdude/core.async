@@ -9,7 +9,7 @@
 (ns cljs.core.async
   (:require [cljs.core.async.impl.ioc-macros :as ioc]))
 
-#_(defmacro go
+(defmacro go
   "Asynchronously executes the body, returning immediately to the
   calling thread. Additionally, any visible calls to <!, >! and alt!/alts!
   channel operations within the body will block (if necessary) by
@@ -20,16 +20,6 @@
   Returns a channel which will receive the result of the body when
   completed"
   [& body]
-  `(let [c# (cljs.core.async/chan 1)]
-     (cljs.core.async.impl.dispatch/run
-      (fn []
-        (let [f# ~(ioc/state-machine body 1 &env ioc/async-custom-terminators)
-              state# (-> (f#)
-                         (ioc/aset-all! cljs.core.async.impl.ioc-helpers/USER-START-IDX c#))]
-          (cljs.core.async.impl.ioc-helpers/run-state-machine-wrapped state#))))
-     c#))
-
-(defmacro go [& body]
   `(let [c# (cljs.core.async/chan 1)]
      ((^:async fn []
        (try
