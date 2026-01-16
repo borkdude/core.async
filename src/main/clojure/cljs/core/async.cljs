@@ -13,19 +13,9 @@
               [cljs.core.async.impl.buffers :as buffers]
               [cljs.core.async.impl.timers :as timers]
               [cljs.core.async.impl.dispatch :as dispatch]
-              [cljs.core.async.impl.ioc-helpers]
-              [goog.array :as garray])
-    (:require-macros [cljs.core.async.impl.ioc-macros :as ioc]
-                     [cljs.core.async :refer [go go-loop]]))
-
-(defn- fn-handler
-  ([f] (fn-handler f true))
-  ([f blockable]
-   (reify
-     impl/Handler
-     (active? [_] true)
-     (blockable? [_] blockable)
-     (commit [_] f))))
+              [goog.array :as garray]
+              [cljs.core.async.impl.helpers :refer [fn-handler]])
+    (:require-macros [cljs.core.async :refer [go go-loop <! >! alts!]]))
 
 (defn buffer
   "Returns a fixed buffer of size n. When full, puts will block/park."

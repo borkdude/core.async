@@ -6,8 +6,7 @@
 ;;   the terms of this license.
 ;;   You must not remove this notice, or any other, from this software.
 
-(ns cljs.core.async
-  (:require [cljs.core.async.impl.ioc-macros :as ioc]))
+(ns cljs.core.async)
 
 (defmacro go
   "Asynchronously executes the body, returning immediately to the
@@ -23,13 +22,20 @@
   `(let [c# (cljs.core.async/chan 1)]
      ((^:async fn []
        (try
-         (when-some [result# ~(ioc/transform-body body
-                                                 &env
-                                                 ioc/async-custom-terminators)]
+         (when-some [result# (do ~@body)]
            (cljs.core.async/put! c# result#))
          (finally
            (cljs.core.async/close! c#)))))
      c#))
+
+(defmacro <! [chan]
+  `(await (cljs.core.async.impl.helpers/go-take! ~chan)))
+
+(defmacro >! [chan val]
+  `(await (cljs.core.async.impl.helpers/go-put! ~chan ~val)))
+
+(defmacro alts! [chans & opts]
+  `(await (cljs.core.async/ioc-alts! ~chans ~@opts)))
 
 (defn do-alt [alts clauses]
   (assert (even? (count clauses)) "unbalanced clauses")
