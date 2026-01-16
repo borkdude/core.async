@@ -23,9 +23,9 @@
   `(let [c# (cljs.core.async/chan 1)]
      ((^:async fn []
        (try
-         (when-some [result# ~(ioc/transform-awaits
-                               (assoc &env :terminators ioc/async-custom-terminators)
-                               `(do ~@body))]
+         (when-some [result# ~(ioc/transform-body body
+                                                 &env
+                                                 ioc/async-custom-terminators)]
            (cljs.core.async/put! c# result#))
          (finally
            (cljs.core.async/close! c#)))))

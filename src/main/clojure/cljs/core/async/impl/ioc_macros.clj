@@ -23,78 +23,75 @@
   x)
 
 ;; Dispatch clojure forms based on data type
-(defmulti -analyze (fn [x _env]
-                     (cond
-                       (symbol? x) :symbol
-                       (seq? x) :list
-                       (map? x) :map
-                       (set? x) :set
-                       (vector? x) :vector
-                       (instance? JSValue x) :js-value
-                       :else :default)))
-
-(defn analyze [x env]
-  (-analyze x env))
+(defmulti transform (fn [x _env]
+                       (cond
+                         (symbol? x) :symbol
+                         (seq? x) :list
+                         (map? x) :map
+                         (set? x) :set
+                         (vector? x) :vector
+                         (instance? JSValue x) :js-value
+                         :else :default)))
 
 ;; Given an sexpr, dispatch on the first item
-(defmulti analyze-special
+(defmulti transform-special
   (fn [x env]
     (first x)))
 
-;; NOTE: we only need to analyze special forms that either introduce locals (e.g
+;; NOTE: we only need to handle special forms that either introduce locals (e.g
 ;; `let*`, `try`) or have special parts that are treated like quoted
 ;; values (`case`). Special forms like `if`, `recur` etc. do not need special
-;; analysis.
+;; handling.
 
 (defn special? [x]
-  (let [^clojure.lang.MultiFn mfn analyze-special]
+  (let [^clojure.lang.MultiFn mfn transform-special]
     (.getMethod mfn x)))
 
-(defn analyze-seq [args env]
-  (map #(analyze % env) args))
+(defn transform-seq [args env]
+  (map #(transform % env) args))
 
-(defmethod analyze-special 'let*
+(defmethod transform-special 'let*
   [[_ binds & body] env]
   (let [parted (partition 2 binds)
         [env binds] (reduce (fn [[env binds] [k v]]
                                  (let [env (assoc-in env [:locals k] k)]
-                                   [env (conj binds k (analyze v env))] ))
+                                   [env (conj binds k (transform v env))] ))
                                [env []]
                                parted)]
-    `(let* ~binds ~(analyze `(do ~@body) env))))
+    `(let* ~binds ~(transform `(do ~@body) env))))
 
-(defmethod analyze-special 'loop*
+(defmethod transform-special 'loop*
   [[_ binds & body] env]
   (let [parted (partition 2 binds)
         [env binds] (reduce (fn [[env binds] [k v]]
                               (let [env (assoc-in env [:locals k] k)]
-                                [env (conj binds k (analyze v env))] ))
+                                [env (conj binds k (transform v env))] ))
                             [env []]
                             parted)]
-    `(loop* ~binds ~(analyze `(do ~@body) env))))
+    `(loop* ~binds ~(transform `(do ~@body) env))))
 
-(defmethod analyze-special 'case
+(defmethod transform-special 'case
   [[_ val & body] env]
   (let [clauses (partition 2 body)
         default (when (odd? (count body))
                   (last body))]
-    `(case ~(analyze val env)
+    `(case ~(transform val env)
        ~@(mapcat (fn [[clause body]]
-                   [clause (analyze body env)])
+                   [clause (transform body env)])
                  clauses)
-       ~@(when default [(analyze default env)]))))
+       ~@(when default [(transform default env)]))))
 
 ;; ASYNC-221
-(defmethod analyze-special 'letfn*
+(defmethod transform-special 'letfn*
   [[letfn* bindings & body] env]
   (let [locals (take-nth 2 bindings)
         assigned (take-nth 2 (rest bindings))
         env (update env :locals merge (zipmap locals locals))
-        bindings (vec (interleave locals (map #(analyze % env) assigned)))
-        body (map #(analyze % env) body)]
+        bindings (vec (interleave locals (map #(transform % env) assigned)))
+        body (map #(transform % env) body)]
     (list* letfn* bindings body)))
 
-(defmethod analyze-special 'quote
+(defmethod transform-special 'quote
   [expr env]
   expr)
 
@@ -126,24 +123,24 @@
     :finally nil}
    body))
 
-(defmethod analyze-special 'try
+(defmethod transform-special 'try
   [[_ & body] env]
   (let [{:keys [body catches finally]} (destructure-try body)
-        analyzed-body (map #(analyze % env) body)
-        analyzed-catches (map (fn [[_ ex-type ex-sym & catch-body]]
-                                (let [env' (assoc-in env [:locals ex-sym] ex-sym)
-                                      catch-body (map #(analyze % env') catch-body)]
-                                  `(catch ~ex-type ~ex-sym ~@catch-body)))
-                              catches)
-        analyzed-finally (when finally
-                           (let [finally-body (map #(analyze % env) (rest finally))]
-                             `(finally ~@finally-body)))]
+        transformed-body (map #(transform % env) body)
+        transformed-catches (map (fn [[_ ex-type ex-sym & catch-body]]
+                                   (let [env' (assoc-in env [:locals ex-sym] ex-sym)
+                                         catch-body (map #(transform % env') catch-body)]
+                                     `(catch ~ex-type ~ex-sym ~@catch-body)))
+                                 catches)
+        transformed-finally (when finally
+                              (let [finally-body (map #(transform % env) (rest finally))]
+                                `(finally ~@finally-body)))]
     `(try
-      ~@analyzed-body
-      ~@analyzed-catches
-      ~@(when analyzed-finally [analyzed-finally]))))
+      ~@transformed-body
+      ~@transformed-catches
+      ~@(when transformed-finally [transformed-finally]))))
 
-(defmethod analyze-special 'fn*
+(defmethod transform-special 'fn*
   [fn-expr env]
   (let [prelude (take-while (complement sequential?) fn-expr)
         nm (second prelude)
@@ -155,7 +152,7 @@
                        (let [args (first x)
                              locals (zipmap args args)
                              env (update env :locals merge locals)]
-                         (doall (list* args (map #(analyze % env) (rest x))))))]
+                         (list* args (map #(transform % env) (rest x)))))]
     (concat prelude (map #(body-handler env %) remainder))))
 
 (def special-override? '#{case clojure.core/case
@@ -193,7 +190,7 @@
        (cljs.core/await v#)
        v#)))
 
-(defmethod -analyze :list
+(defmethod transform :list
   [lst env]
   (let [val (let [exp (expand env lst)
                   terminators (:terminators env)
@@ -202,41 +199,44 @@
                 (if (symbol? first-expr)
                   (let [f (fixup-aliases first-expr env)]
                     (cond
-                      (special? f) (analyze-special exp env)
-                      (get (:locals env) f) (analyze-seq exp env)
+                      (special? f) (transform-special exp env)
+                      (get (:locals env) f) (transform-seq exp env)
                       (get terminators f) (terminate-custom (next exp) (get terminators f))
-                      :else (analyze-seq exp env)))
-                  (analyze-seq exp env))
-                (analyze exp env)))]
+                      :else (transform-seq exp env)))
+                  (transform-seq exp env))
+                (transform exp env)))]
     val))
 
-(defmethod -analyze :default
+(defmethod transform :default
   [x env] x)
 
-(defmethod -analyze :symbol
+(defmethod transform :symbol
   [x env] x)
 
-(defmethod -analyze :map
+(defmethod transform :map
   [x env]
-  (-analyze `(hash-map ~@(mapcat identity x)) env))
+  (transform `(hash-map ~@(mapcat identity x)) env))
 
-(defmethod -analyze :vector
+(defmethod transform :vector
   [x env]
-  (-analyze `(vector ~@x) env))
+  (transform `(vector ~@x) env))
 
-(defmethod -analyze :js-value
+(defmethod transform :js-value
   [^JSValue x env]
   (let [items (.-val x)]
     (if (map? items)
-      (-analyze `(cljs.core/js-obj ~@(mapcat (fn [[k v]] [(name k) v]) items)) env)
-      (-analyze `(cljs.core/array ~@items) env))))
+      (transform `(cljs.core/js-obj ~@(mapcat (fn [[k v]] [(name k) v]) items)) env)
+      (transform `(cljs.core/array ~@items) env))))
 
-(defmethod -analyze :set
+(defmethod transform :set
   [x env]
-  (-analyze `(hash-set ~@x) env))
+  (transform `(hash-set ~@x) env))
 
-(defn transform-awaits [env form]
-  (-analyze form env))
+(defn transform-body [body env user-transitions]
+  (transform (if (= 1 (count body))
+               (first body)
+               (list* 'do body))
+             (assoc env :terminators user-transitions)))
 
 (def async-custom-terminators
   {'<! 'cljs.core.async.impl.ioc-helpers/take!
