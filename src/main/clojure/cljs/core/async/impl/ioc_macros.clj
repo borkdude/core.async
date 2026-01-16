@@ -93,40 +93,16 @@
   [[_ & body] env]
   (list* 'do (map #(analyze % env) body)))
 
-#_(defmethod analyze* 'case
-  [[_ val & body]]
+(defmethod analyze-sexpr 'case
+  [[_ val & body] env]
   (let [clauses (partition 2 body)
         default (when (odd? (count body))
                   (last body))]
-    (gen-plan
-     [end-blk (add-block)
-      start-blk (get-block)
-      clause-blocks (all (map (fn [expr]
-                                (gen-plan
-                                 [blk-id (add-block)
-                                  _ (set-block blk-id)
-                                  expr-id (item-to-ssa expr)
-                                  _ (if (not= expr-id ::terminated)
-                                      (add-instruction (->Jmp expr-id end-blk))
-                                      (no-op))]
-                                 blk-id))
-                              (map second clauses)))
-      default-block (if (odd? (count body))
-                      (gen-plan
-                       [blk-id (add-block)
-                        _ (set-block blk-id)
-                        expr-id (item-to-ssa default)
-                        _ (if (not= expr-id ::terminated)
-                            (add-instruction (->Jmp expr-id end-blk))
-                            (no-op))]
-                       blk-id)
-                      (no-op))
-      _ (set-block start-blk)
-      val-id (item-to-ssa val)
-      case-id (add-instruction (->Case val-id (map first clauses) clause-blocks default-block))
-      _ (set-block end-blk)
-      ret-id (add-instruction (->Const ::value))]
-     ret-id)))
+    `(case ~(analyze val env)
+       ~@(mapcat (fn [[clause body]]
+                   [clause (analyze body env)])
+                 clauses)
+       ~@(when default [(analyze default env)]))))
 
 (defmethod analyze-sexpr 'quote
   [expr env]

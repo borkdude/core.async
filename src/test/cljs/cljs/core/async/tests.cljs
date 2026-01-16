@@ -533,7 +533,9 @@
     (go (if (odd? 2) 2 3)
         (done))))
 
-(deftest try-local-test
+;;;; Tests to exercise ioc_macros.clj expansion
+
+(deftest try-test
   (async done
     (go (try
           (throw (ex-info "oops" {}))
@@ -545,6 +547,15 @@
               (catch :default e
                 (is true))))
           (finally (done))))))
+
+(deftest case-test
+  (async done
+    (go
+      (is (= :foo (<! (go (case 1
+                            ;; should not be expanded as macro
+                            (-> 1 inc) :foo
+                            :bar)))))
+      (done))))
 
 (comment
 
